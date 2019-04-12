@@ -1,0 +1,12 @@
+/settings.py
+/*settings.py
+
+venv/
+
+
+.idea/
+.pytest_cache
+.coverage
+*.pyc
+
+*.log

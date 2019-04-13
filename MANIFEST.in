@@ -1,0 +1,6 @@
+include LICENSE
+include *.md
+exclude README.md
+include requirements.txt
+include test-requirements.txt
+exclude sample.py

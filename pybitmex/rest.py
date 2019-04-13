@@ -179,7 +179,9 @@ class RestClient:
     def place_orders(self, orders, post_only=True, max_retries=None):
         """Create multiple orders."""
         for order in orders:
-            order['clOrdID'] = self.order_id_prefix + base64.b64encode(uuid.uuid4().bytes).decode('utf8').rstrip('=\n')
+            if order.get('clOrdID') is None:
+                order['clOrdID'] = self.order_id_prefix +\
+                                   base64.b64encode(uuid.uuid4().bytes).decode('utf8').rstrip('=\n')
             order['symbol'] = self.symbol
             if post_only:
                 order['execInst'] = 'ParticipateDoNotInitiate'

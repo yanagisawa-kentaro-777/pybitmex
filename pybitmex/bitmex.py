@@ -1,11 +1,6 @@
-from threading import Lock
-from concurrent.futures import ThreadPoolExecutor
-
 import logging
 from datetime import timezone
 from dateutil.parser import parse
-
-import schedule
 
 from pybitmex import ws, rest, models
 
@@ -33,15 +28,7 @@ class BitMEXClient:
         self.symbol = symbol
         self.is_running = True
         if use_websocket:
-            self.ws_client0 = ws.BitMEXWebSocketClient(
-                endpoint=uri,
-                symbol=symbol,
-                api_key=api_key,
-                api_secret=api_secret,
-                subscriptions=subscriptions,
-                expiration_seconds=expiration_seconds
-            )
-            self.ws_client1 = ws.BitMEXWebSocketClient(
+            self.ws_client = ws.BitMEXWebSocketClient(
                 endpoint=uri,
                 symbol=symbol,
                 api_key=api_key,
@@ -50,15 +37,8 @@ class BitMEXClient:
                 expiration_seconds=expiration_seconds
             )
             self.ws_refresh_interval_seconds = ws_refresh_interval_seconds
-            self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ws-refresher")
-            self.executor.submit(self._schedule_ws_refresh)
         else:
-            self.ws_client0 = None
-            self.ws_client1 = None
-            self.executor = None
-        self.ws_lock0 = Lock()
-        self.ws_lock1 = Lock()
-        self.last_refreshed_ws = 0
+            self.ws_client = None
 
         if use_rest:
             self.rest_client = rest.RestClient(
@@ -79,111 +59,24 @@ class BitMEXClient:
         return ws.BitMEXWebSocketClient(
             endpoint=self.uri,
             symbol=self.symbol,
-            api_key=self.ws_client0.api_key,
-            api_secret=self.ws_client0.api_secret,
-            subscriptions=self.ws_client0.subscription_list,
-            expiration_seconds=self.ws_client0.expiration_seconds
+            api_key=self.ws_client.api_key,
+            api_secret=self.ws_client.api_secret,
+            subscriptions=self.ws_client.subscription_list,
+            expiration_seconds=self.ws_client.expiration_seconds
         )
-
-    @staticmethod
-    def _close_ws_client(ws_client, ws_lock):
-        if ws_client:
-            ws_lock.acquire()
-            try:
-                ws_client.exit()
-            finally:
-                ws_lock.release()
-
-    def _schedule_ws_refresh(self):
-        import time
-        schedule.every(self.ws_refresh_interval_seconds).seconds.do(self.refresh_ws_client)
-        self.logger.info("WS Refresh task is registered for every %d seconds.", self.ws_refresh_interval_seconds)
-        while self.is_running:
-            schedule.run_pending()
-            time.sleep(1)
-
-    def refresh_ws_client(self):
-        try:
-            self.logger.info("Executing WS Refresh task.")
-            if self.last_refreshed_ws == 0:
-                self.ws_lock1.acquire()
-                try:
-                    self.logger.info("Refreshing ws client 1.")
-                    self.ws_client1 = self._create_ws_client()
-                    self.last_refreshed_ws = 1
-                finally:
-                    self.ws_lock1.release()
-            else:
-                self.ws_lock0.acquire()
-                try:
-                    self.logger.info("Refreshing ws client 0.")
-                    self.ws_client0 = self._create_ws_client()
-                    self.last_refreshed_ws = 0
-                finally:
-                    self.ws_lock0.release()
-        except Exception as e:
-            import traceback
-            import sys
-            traceback.print_exc(file=sys.stdout)
-
-            self.logger.error("Error: %s" % str(e))
-            self.logger.error(sys.exc_info())
 
     def close(self):
         self.is_running = False
-        self._close_ws_client(self.ws_client0, self.ws_lock0)
-        self._close_ws_client(self.ws_client1, self.ws_lock1)
-        if self.executor:
-            self.executor.shutdown(wait=False)
+        self.ws_client.exit()
 
         if self.rest_client is not None:
             self.rest_client.close()
 
     def get_last_ws_update(self, table_name):
-        time0 = self.ws_client0.updates.get(table_name)
-        time1 = self.ws_client1.updates.get(table_name)
-        if time0 is not None and time1 is not None:
-            # Both are active. So we compare the latest update time.
-            if time0 < time1:
-                return time1
-            else:
-                return time0
-        elif time0 is None:
-            return time1
-        elif time1 is None:
-            return time0
-        else:
-            # Both are inactive. We cannot help.
-            return None
+        return self.ws_client.updates.get(table_name)
 
     def _select_ws_client(self, table_name):
-        locked0 = self.ws_lock0.acquire(blocking=False)
-        if not locked0:
-            return self.ws_client1
-        try:
-            locked1 = self.ws_lock1.acquire(blocking=False)
-            if not locked1:
-                return self.ws_client0
-            try:
-                time0 = self.ws_client0.updates.get(table_name)
-                time1 = self.ws_client1.updates.get(table_name)
-                if time0 is not None and time1 is not None:
-                    # Both are active. So we compare the latest update time.
-                    if time0 < time1:
-                        return self.ws_client1
-                    else:
-                        return self.ws_client0
-                elif time0 is None:
-                    return self.ws_client1
-                elif time1 is None:
-                    return self.ws_client0
-                else:
-                    # Both are inactive. We cannot help.
-                    return self.ws_client0
-            finally:
-                self.ws_lock1.release()
-        finally:
-            self.ws_lock0.release()
+        return self.ws_client
 
     def ws_raw_instrument(self):
         return self._select_ws_client('instrument').get_instrument()
@@ -197,7 +90,7 @@ class BitMEXClient:
         return state == "Open" or state == "Closed"
 
     def ws_raw_order_books_of_market(self):
-        table_name = self.ws_client0.get_order_book_table_name()
+        table_name = self.ws_client.get_order_book_table_name()
         return self._select_ws_client(table_name).market_depth()
 
     def ws_sorted_bids_and_asks_of_market(self):

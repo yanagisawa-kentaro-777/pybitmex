@@ -1,5 +1,5 @@
 from .bitmex import BitMEXClient
-from .models import OpenOrder, OpenOrders
+from .models import Trade, OpenOrder, OpenOrders
 from .rest import RestClientError
 
 __copyright__ = 'Copyright (C) 2019 Weidenthal Research Institute LLC'
@@ -9,4 +9,4 @@ __author__ = 'YANAGISAWA, Kentaro'
 __author_email__ = 'yanagisawa.kentaro@weidenthal.co.jp'
 __url__ = 'https://github.com/yanagisawa-kentaro-777/pybitmex'
 
-__all__ = [BitMEXClient, OpenOrder, OpenOrders, RestClientError]
+__all__ = ["BitMEXClient", "Trade", "OpenOrder", "OpenOrders", "RestClientError"]

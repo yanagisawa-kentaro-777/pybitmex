@@ -139,12 +139,24 @@ class BitMEXClient:
         if self.rest_client is not None:
             self.rest_client.close()
 
-    def is_market_in_normal_state(self):
-        instrument = self.get_instrument()
-        state = instrument["state"]
-        return state == "Open" or state == "Closed"
+    def get_last_ws_update(self, table_name):
+        time0 = self.ws_client0.updates.get(table_name)
+        time1 = self.ws_client1.updates.get(table_name)
+        if time0 is not None and time1 is not None:
+            # Both are active. So we compare the latest update time.
+            if time0 < time1:
+                return time1
+            else:
+                return time0
+        elif time0 is None:
+            return time1
+        elif time1 is None:
+            return time0
+        else:
+            # Both are inactive. We cannot help.
+            return None
 
-    def _get_latest_ws_client(self, table_name):
+    def _select_ws_client(self, table_name):
         locked0 = self.ws_lock0.acquire(blocking=False)
         if not locked0:
             return self.ws_client1
@@ -173,17 +185,41 @@ class BitMEXClient:
         finally:
             self.ws_lock0.release()
 
-    def get_instrument(self):
-        return self._get_latest_ws_client('instrument').get_instrument()
+    def ws_raw_instrument(self):
+        return self._select_ws_client('instrument').get_instrument()
 
-    def order_books(self):
+    def ws_market_state(self):
+        instrument = self.ws_raw_instrument()
+        return instrument["state"]
+
+    def is_market_in_normal_state(self):
+        state = self.ws_market_state()
+        return state == "Open" or state == "Closed"
+
+    def ws_raw_order_books_of_market(self):
         table_name = self.ws_client0.get_order_book_table_name()
-        return self._get_latest_ws_client(table_name).market_depth()
+        return self._select_ws_client(table_name).market_depth()
 
-    def recent_trades(self):
-        return self._get_latest_ws_client('trade').recent_trades()
+    def ws_sorted_bids_and_asks_of_market(self):
+        depth = self.ws_raw_order_books_of_market()
+        bids = sorted([b for b in depth if b["side"] == "Buy"], key=lambda b: b["price"], reverse=True)
+        asks = sorted([b for b in depth if b["side"] == "Sell"], key=lambda b: b["price"], reverse=False)
 
-    def current_position(self):
+        def prune(order_books):
+            return [{"price": float(each["price"]), "size": int(each["size"])} for each in order_books]
+
+        return prune(bids), prune(asks)
+
+    def ws_raw_recent_trades_of_market(self):
+        return self._select_ws_client('trade').recent_trades()
+
+    def ws_sorted_recent_trade_objects_of_market(self, reverse=False):
+        raw_trades = self.ws_raw_recent_trades_of_market()
+        result = [models.Trade(t["trdMatchID"], parse(t["timestamp"]).astimezone(timezone.utc),
+                  t["side"], float(t["price"]), int(t["size"])) for t in raw_trades]
+        return sorted([t for t in result], key=lambda t: (t.timestamp, t.trd_match_id), reverse=reverse)
+
+    def ws_raw_current_position(self):
         """
         [{'account': XXXXX, 'symbol': 'XBTUSD', 'currency': 'XBt', 'underlying': 'XBT',
          'quoteCurrency': 'USD', 'commission': 0.00075, 'initMarginReq': 0.01,
@@ -212,14 +248,19 @@ class BitMEXClient:
         'bankruptPrice': 100000000, 'timestamp': '2019-03-25T07:27:06.107Z', 'lastPrice': 3964.82,
         'lastValue': 756660}]
         """
+        return self._select_ws_client('position').positions()
 
-        json_array = self._get_latest_ws_client('position').positions()
+    def ws_current_position_size(self):
+        json_array = self.ws_raw_current_position()
         for each in json_array:
             if each["symbol"] == self.symbol:
                 return int(each["currentQty"])
         return 0
 
-    def open_orders(self):
+    def ws_raw_open_orders_of_account(self):
+        return self._select_ws_client('order').open_orders(self.order_id_prefix)
+
+    def ws_open_order_objects_of_account(self):
         """
         [{'orderID': '57180f5f-d16a-62d6-ff8d-d1430637a8d9',
         'clOrdID': '', 'clOrdLinkID': '',
@@ -244,7 +285,7 @@ class BitMEXClient:
                 parse(json["timestamp"]).astimezone(timezone.utc)
             )
 
-        json_array = self._get_latest_ws_client('order').open_orders(self.order_id_prefix)
+        json_array = self.ws_raw_open_orders_of_account()
         bids = [order_obj_from_json(each) for each in json_array if each["side"] == "Buy"]
         asks = [order_obj_from_json(each) for each in json_array if each["side"] == "Sell"]
         return models.OpenOrders(
@@ -252,7 +293,7 @@ class BitMEXClient:
             asks=sorted(asks, key=lambda o: o.price, reverse=False)
         )
 
-    def recent_executions(self):
+    def ws_recent_trades_of_account(self):
         """
         [{'execID': '0e14ddd0-702d-7338-82d8-fd4c1a419d03',
         'orderID': '57180f5f-d16a-62d6-ff8d-d1430637a8d9',
@@ -272,9 +313,12 @@ class BitMEXClient:
         'execComm': -189, 'homeNotional': -0.0075606, 'foreignNotional': 30,
         'transactTime': '2019-03-25T07:26:06.334Z', 'timestamp': '2019-03-25T07:26:06.334Z'}]
          """
-        return self._get_latest_ws_client('execution').executions()
+        return self._select_ws_client('execution').executions()
 
-    def balances(self):
+    def ws_raw_balances_of_account(self):
+        return self._select_ws_client('margin').funds()
+
+    def ws_balances_of_account_object(self):
         """
         {'account': XXXXX, 'currency': 'XBt', 'riskLimit': 1000000000000, 'prevState': '',
         'state': '', 'action': '', 'amount': 377084143, 'pendingCredit': 0, 'pendingDebit': 0,
@@ -289,32 +333,34 @@ class BitMEXClient:
         'timestamp': '2019-03-25T07:56:25.462Z', 'grossLastValue': 756090, 'commission': None}
         """
         satoshis_for_btc = 100000000
-        data = self._get_latest_ws_client('margin').funds()
+        data = self.ws_raw_balances_of_account()
         withdrawable_balance = float(data['withdrawableMargin']) / satoshis_for_btc
         wallet_balance = float(data['walletBalance']) / satoshis_for_btc
         return withdrawable_balance, wallet_balance
 
-    def place_orders(self, new_order_list, post_only=True, max_retries=None):
+    def rest_place_orders(self, new_order_list, post_only=True, max_retries=None):
         if len(new_order_list) == 0:
             return
         self.rest_client.place_orders([o for o in new_order_list], post_only=post_only, max_retries=max_retries)
 
-    def cancel_orders(self, order_id_list, max_retries=None):
+    def rest_cancel_orders(self, order_id_list, max_retries=None):
         if len(order_id_list) == 0:
             return
         self.rest_client.cancel_orders(order_id_list, max_retries=max_retries)
 
-    def cancel_all_orders(self):
-        open_orders = self.open_orders()
-        self.cancel_orders([o.order_id for o in open_orders.to_list()])
+    def rest_cancel_all_orders(self):
+        open_orders = self.ws_open_order_objects_of_account()
+        self.rest_cancel_orders([o.order_id for o in open_orders.to_list()])
 
-    def get_trade_history(self, start_time_str, end_time_str, count=500):
-        trades = self.rest_client.get_trade_history(start_time_str, end_time_str, count)
+    def rest_get_raw_orders_of_account(self, filter_json_obj, count=500):
+        return self.rest_client.get_orders_of_account(filter_json_obj, count)
+
+    def rest_get_raw_positions_of_account(self, filter_json_obj, count=500):
+        return self.rest_client.get_positions_of_account(filter_json_obj, count)
+
+    def rest_get_raw_trade_history_of_account(self, filter_json_obj, count=500):
+        trades = self.rest_client.get_trade_history(filter_json_obj, count)
         return [t for t in trades if t['symbol'] == self.symbol and t['execType'] == 'Trade']
 
-    def get_trade_history_with_filter_json(self, filter_json_obj, count=500):
-        trades = self.rest_client.get_trade_history_with_filter_json(filter_json_obj, count)
-        return [t for t in trades if t['symbol'] == self.symbol and t['execType'] == 'Trade']
-
-    def get_user_margin(self):
+    def rest_get_raw_margin_of_account(self):
         return self.rest_client.get_user_margin()

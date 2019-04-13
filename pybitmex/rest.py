@@ -157,13 +157,18 @@ class RestClient:
             self.logger.warning("Connection error.")
             return retry(3, 999)
 
-    def get_trade_history(self, start_time, end_time, count=500):
+    def get_trade_history(self, filter_json_obj, count=500):
         path = 'execution/tradeHistory?count={:d}'.format(count) +\
-               '&filter={"startTime": "' + start_time + '", "endTime": "' + end_time + '"}'
+               '&filter=' + json.dumps(filter_json_obj)
         return self.curl_bitmex(path=path, verb='GET')
 
-    def get_trade_history_with_filter_json(self, filter_json_obj, count=500):
-        path = 'execution/tradeHistory?count={:d}'.format(count) +\
+    def get_orders_of_account(self, filter_json_obj, count=500):
+        path = 'order?count={:d}'.format(count) +\
+               '&filter=' + json.dumps(filter_json_obj)
+        return self.curl_bitmex(path=path, verb='GET')
+
+    def get_positions_of_account(self, filter_json_obj, count=500):
+        path = 'position?count={:d}'.format(count) +\
                '&filter=' + json.dumps(filter_json_obj)
         return self.curl_bitmex(path=path, verb='GET')
 

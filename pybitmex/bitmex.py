@@ -55,21 +55,13 @@ class BitMEXClient:
             self.rest_client = None
         self.order_id_prefix = order_id_prefix
 
-    def _create_ws_client(self):
-        return ws.BitMEXWebSocketClient(
-            endpoint=self.uri,
-            symbol=self.symbol,
-            api_key=self.ws_client.api_key,
-            api_secret=self.ws_client.api_secret,
-            subscriptions=self.ws_client.subscription_list,
-            expiration_seconds=self.ws_client.expiration_seconds
-        )
-
     def close(self):
         self.is_running = False
-        self.ws_client.exit()
 
-        if self.rest_client is not None:
+        if self.ws_client:
+            self.ws_client.exit()
+
+        if self.rest_client:
             self.rest_client.close()
 
     def get_last_ws_update(self, table_name):

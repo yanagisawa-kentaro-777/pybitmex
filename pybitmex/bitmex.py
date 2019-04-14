@@ -1,5 +1,5 @@
 import logging
-from datetime import timezone
+from datetime import datetime, timezone
 from dateutil.parser import parse
 
 from pybitmex import ws, rest, models
@@ -257,3 +257,22 @@ class BitMEXClient:
 
     def rest_get_raw_margin_of_account(self):
         return self.rest_client.get_user_margin()
+
+    @staticmethod
+    def create_daily_filter(year, month, day):
+        return {"timestamp.date": "{:04}-{:02}-{:02}".format(year, month, day)}
+
+    @staticmethod
+    def create_hourly_filter(year, month, day, hour):
+        result = BitMEXClient.create_daily_filter(year, month, day)
+        result['timestamp.hh'] = "{:02}".format(hour)
+        return result
+
+    @staticmethod
+    def create_time_range_filter(start_dt: datetime, end_dt: datetime):
+        result = {}
+        if start_dt:
+            result['startTime'] = start_dt.strftime("%Y-%m-%d %H:%M:%S")
+        if end_dt:
+            result['endTime'] = end_dt.strftime("%Y-%m-%d %H:%M:%S")
+        return result

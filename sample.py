@@ -1,6 +1,6 @@
 import time
 from pybitmex import *
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 bitmex = BitMEXClient(
     "https://www.bitmex.com/api/v1/", "XBTUSD",
@@ -43,7 +43,13 @@ while True:
     #rest_open_orders = bitmex.rest_get_raw_orders_of_account({"open": True})
     #print("REST Open Orders: {}".format(str(rest_open_orders)))
 
-    #rest_trade_history = bitmex.rest_get_raw_trade_history_of_account({}, count=10)
-    #print("REST Trades: {}".format(str(rest_trade_history)))
+    # filter_obj = bitmex.create_hourly_filter(2019, 4, 14, 1)
+    filter_obj = bitmex.create_time_range_filter(datetime.now().astimezone(timezone.utc) -
+                                                 timedelta(hours=2), datetime.now().astimezone(timezone.utc))
+    print(str(filter_obj))
+    rest_trade_history =\
+        bitmex.rest_get_raw_trade_history_of_account(filter_obj, count=500)
+    print(len(rest_trade_history))
+    print(str(rest_trade_history[0]['timestamp']) + " " + (rest_trade_history[-1]['timestamp']))
     #print("")
 

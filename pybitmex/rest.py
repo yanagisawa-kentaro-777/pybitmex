@@ -187,6 +187,15 @@ class RestClient:
                 order['execInst'] = 'ParticipateDoNotInitiate'
         return self.curl_bitmex(path='order/bulk', postdict={'orders': orders}, verb='POST', max_retries=max_retries)
 
+    def market_close_position(self, order, max_retries=None):
+        if order.get('clOrdID') is None:
+            order['clOrdID'] = self.order_id_prefix + \
+                               base64.b64encode(uuid.uuid4().bytes).decode('utf8').rstrip('=\n')
+        order['symbol'] = self.symbol
+        order['ordType'] = 'Market'
+        order['execInst'] = 'Close'
+        return self.curl_bitmex(path='order', postdict=order, verb='POST', max_retries=max_retries)
+
     def cancel_orders(self, order_id_list, max_retries=None):
         """Cancel an existing order."""
         path = "order"

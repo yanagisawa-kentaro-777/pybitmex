@@ -1,5 +1,5 @@
 import logging
-from datetime import timezone
+from datetime import datetime, timezone
 from dateutil.parser import parse
 
 from pybitmex import ws, rest, models
@@ -55,21 +55,13 @@ class BitMEXClient:
             self.rest_client = None
         self.order_id_prefix = order_id_prefix
 
-    def _create_ws_client(self):
-        return ws.BitMEXWebSocketClient(
-            endpoint=self.uri,
-            symbol=self.symbol,
-            api_key=self.ws_client.api_key,
-            api_secret=self.ws_client.api_secret,
-            subscriptions=self.ws_client.subscription_list,
-            expiration_seconds=self.ws_client.expiration_seconds
-        )
-
     def close(self):
         self.is_running = False
-        self.ws_client.exit()
 
-        if self.rest_client is not None:
+        if self.ws_client:
+            self.ws_client.exit()
+
+        if self.rest_client:
             self.rest_client.close()
 
     def get_last_ws_update(self, table_name):
@@ -236,6 +228,9 @@ class BitMEXClient:
             return
         self.rest_client.place_orders([o for o in new_order_list], post_only=post_only, max_retries=max_retries)
 
+    def rest_market_close_position(self, order, max_retries=None):
+        self.rest_client.market_close_position(order, max_retries=max_retries)
+
     def rest_cancel_orders(self, order_id_list, max_retries=None):
         if len(order_id_list) == 0:
             return
@@ -257,3 +252,29 @@ class BitMEXClient:
 
     def rest_get_raw_margin_of_account(self):
         return self.rest_client.get_user_margin()
+
+    @staticmethod
+    def create_daily_filter(year, month, day):
+        return {"timestamp.date": "{:04}-{:02}-{:02}".format(year, month, day)}
+
+    @staticmethod
+    def create_hourly_filter(year, month, day, hour):
+        result = BitMEXClient.create_daily_filter(year, month, day)
+        result['timestamp.hh'] = "{:02}".format(hour)
+        return result
+
+    @staticmethod
+    def create_minutely_filter(year, month, day, hour, minute):
+        result = BitMEXClient.create_daily_filter(year, month, day)
+        result['timestamp.hh'] = "{:02}".format(hour)
+        result['timestamp.uu'] = "{:02}".format(minute)
+        return result
+
+    @staticmethod
+    def create_time_range_filter(start_dt: datetime, end_dt: datetime):
+        result = {}
+        if start_dt:
+            result['startTime'] = start_dt.strftime("%Y-%m-%d %H:%M:%S")
+        if end_dt:
+            result['endTime'] = end_dt.strftime("%Y-%m-%d %H:%M:%S")
+        return result

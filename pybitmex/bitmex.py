@@ -228,6 +228,9 @@ class BitMEXClient:
             return
         self.rest_client.place_orders([o for o in new_order_list], post_only=post_only, max_retries=max_retries)
 
+    def rest_market_close_position(self, order, max_retries=None):
+        self.rest_client.market_close_position(order, max_retries=max_retries)
+
     def rest_cancel_orders(self, order_id_list, max_retries=None):
         if len(order_id_list) == 0:
             return
@@ -258,6 +261,13 @@ class BitMEXClient:
     def create_hourly_filter(year, month, day, hour):
         result = BitMEXClient.create_daily_filter(year, month, day)
         result['timestamp.hh'] = "{:02}".format(hour)
+        return result
+
+    @staticmethod
+    def create_minutely_filter(year, month, day, hour, minute):
+        result = BitMEXClient.create_daily_filter(year, month, day)
+        result['timestamp.hh'] = "{:02}".format(hour)
+        result['timestamp.uu'] = "{:02}".format(minute)
         return result
 
     @staticmethod

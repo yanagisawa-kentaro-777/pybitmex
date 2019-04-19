@@ -176,12 +176,15 @@ class RestClient:
         path = 'user/margin'
         return self.curl_bitmex(path=path, verb='GET')
 
+    def _generate_client_order_id(self):
+        s = self.order_id_prefix + base64.b64encode(uuid.uuid4().bytes).decode('utf8').rstrip('=\n')
+        return s[:36]
+
     def place_orders(self, orders, post_only=True, max_retries=None):
         """Create multiple orders."""
         for order in orders:
             if order.get('clOrdID') is None:
-                order['clOrdID'] = self.order_id_prefix +\
-                                   base64.b64encode(uuid.uuid4().bytes).decode('utf8').rstrip('=\n')
+                order['clOrdID'] = self._generate_client_order_id()
             order['symbol'] = self.symbol
             if post_only:
                 order['execInst'] = 'ParticipateDoNotInitiate'
@@ -189,8 +192,7 @@ class RestClient:
 
     def market_close_position(self, order, max_retries=None):
         if order.get('clOrdID') is None:
-            order['clOrdID'] = self.order_id_prefix + \
-                               base64.b64encode(uuid.uuid4().bytes).decode('utf8').rstrip('=\n')
+            order['clOrdID'] = self._generate_client_order_id()
         order['symbol'] = self.symbol
         order['ordType'] = 'Market'
         order['execInst'] = 'Close'

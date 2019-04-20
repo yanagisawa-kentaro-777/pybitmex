@@ -11,6 +11,11 @@ import requests
 from pybitmex.auth import APIKeyAuthWithExpires
 
 
+def generate_client_order_id(prefix):
+    s = prefix + base64.b64encode(uuid.uuid4().bytes).decode('utf8').rstrip('=\n')
+    return s[:36]
+
+
 class RestClientError(Exception):
     def __init__(self, message_str, error_code):
         self.message_str = message_str
@@ -177,8 +182,7 @@ class RestClient:
         return self.curl_bitmex(path=path, verb='GET')
 
     def _generate_client_order_id(self):
-        s = self.order_id_prefix + base64.b64encode(uuid.uuid4().bytes).decode('utf8').rstrip('=\n')
-        return s[:36]
+        return generate_client_order_id(self.order_id_prefix)
 
     def place_orders(self, orders, post_only=True, max_retries=None):
         """Create multiple orders."""

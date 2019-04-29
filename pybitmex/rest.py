@@ -120,7 +120,7 @@ class RestClient:
             return response.json()
         except requests.exceptions.HTTPError as e:
             if response is None:
-                rethrow("Unknown Error", -1)
+                rethrow("Unknown Error A", -1)
 
             # 401 - Auth error. This is fatal.
             if response.status_code == 401:
@@ -153,7 +153,7 @@ class RestClient:
                 self.logger.warning(message)
                 rethrow(json.dumps(response.json()), response.status_code)
             # If we haven't returned or re-raised yet, we get here.
-            rethrow(json.dumps(response.json()), response.status_code)
+            rethrow("Unknown Error B", response.status_code)
         except requests.exceptions.Timeout as e:
             # Timeout, re-run this request
             self.logger.info("Request timed out: %s %s", verb, uri)

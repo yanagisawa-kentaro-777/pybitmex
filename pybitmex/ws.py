@@ -208,8 +208,15 @@ class BitMEXWebSocketClient:
     def __wait_for_data_arrival(self, symbol):
         '''On subscribe, this data will come down. Wait for it.'''
         targets = set(self.subscription_list)
+        count = 0
         while not targets <= set(self.data):
-            sleep(0.1)
+            count += 1
+            if 300 < count:
+                self.logger.error("Timeout in receiving data.")
+                self.exit()
+                raise websocket.WebSocketTimeoutException('Cannot load data.')
+            else:
+                sleep(0.1)
 
     def __send_command(self, command, args=None):
         '''Send a raw command.'''

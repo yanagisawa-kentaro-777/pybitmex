@@ -181,6 +181,9 @@ class RestClient:
         path = 'user/margin'
         return self.curl_bitmex(path=path, verb='GET')
 
+    def get_wallet_history(self):
+        return self.curl_bitmex(path="user/walletHistory?count=100", verb="GET")
+
     def _generate_client_order_id(self):
         return generate_client_order_id(self.order_id_prefix)
 
@@ -193,6 +196,9 @@ class RestClient:
             if post_only:
                 order['execInst'] = 'ParticipateDoNotInitiate'
         return self.curl_bitmex(path='order/bulk', postdict={'orders': orders}, verb='POST', max_retries=max_retries)
+
+    def amend_orders(self, orders):
+        self.curl_bitmex(path='order/bulk', postdict={'orders': orders}, verb='PUT')
 
     def market_close_position(self, order, max_retries=None):
         if order.get('clOrdID') is None:

@@ -228,6 +228,12 @@ class BitMEXClient:
             return
         self.rest_client.place_orders([o for o in new_order_list], post_only=post_only, max_retries=max_retries)
 
+    def rest_change_prices_of_orders(self, diff: float, predicate):
+        open_orders = self.ws_open_order_objects_of_account().to_list()
+        orders = [{'orderID': each.order_id, 'price': each.price + diff}
+                  for each in open_orders if predicate(each)]
+        self.rest_client.amend_orders(orders)
+
     def rest_market_close_position(self, order, max_retries=None):
         self.rest_client.market_close_position(order, max_retries=max_retries)
 
@@ -252,6 +258,12 @@ class BitMEXClient:
 
     def rest_get_raw_margin_of_account(self):
         return self.rest_client.get_user_margin()
+
+    def rest_get_raw_wallet_history(self):
+        return self.rest_client.get_wallet_history()
+
+    def generate_client_order_id(self):
+        return rest.generate_client_order_id(self.order_id_prefix)
 
     @staticmethod
     def create_daily_filter(year, month, day):

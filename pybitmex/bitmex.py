@@ -259,11 +259,16 @@ class BitMEXClient:
     def rest_get_raw_margin_of_account(self):
         return self.rest_client.get_user_margin()
 
-    def rest_get_raw_wallet_history(self):
-        return self.rest_client.get_wallet_history()
+    def rest_get_raw_wallet_history(self, filter_json_obj, count=500, sort_reverse=True):
+        result = self.rest_client.get_wallet_history(filter_json_obj, count)
+        return sorted(result, key=lambda e: e['transactTime'], reverse=sort_reverse)
 
     def generate_client_order_id(self):
         return rest.generate_client_order_id(self.order_id_prefix)
+
+    @staticmethod
+    def create_monthly_filter(year, month):
+        return {"timestamp.month": "{:04}-{:02}".format(year, month)}
 
     @staticmethod
     def create_daily_filter(year, month, day):

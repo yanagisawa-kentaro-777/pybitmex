@@ -181,8 +181,10 @@ class RestClient:
         path = 'user/margin'
         return self.curl_bitmex(path=path, verb='GET')
 
-    def get_wallet_history(self):
-        return self.curl_bitmex(path="user/walletHistory?count=100", verb="GET")
+    def get_wallet_history(self, filter_json_obj, count=500):
+        path = 'user/walletHistory?count={:d}'.format(count) +\
+               '&filter=' + json.dumps(filter_json_obj)
+        return self.curl_bitmex(path, verb="GET")
 
     def _generate_client_order_id(self):
         return generate_client_order_id(self.order_id_prefix)

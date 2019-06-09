@@ -226,25 +226,31 @@ class BitMEXClient:
     def rest_place_orders(self, new_order_list, post_only=True, max_retries=None):
         if len(new_order_list) == 0:
             return
-        self.rest_client.place_orders([o for o in new_order_list], post_only=post_only, max_retries=max_retries)
+        return self.rest_client.place_orders([o for o in new_order_list], post_only=post_only, max_retries=max_retries)
 
     def rest_change_prices_of_orders(self, diff: float, predicate):
         open_orders = self.ws_open_order_objects_of_account().to_list()
         orders = [{'orderID': each.order_id, 'price': each.price + diff}
                   for each in open_orders if predicate(each)]
-        self.rest_client.amend_orders(orders)
+        return self.rest_client.amend_orders(orders)
 
     def rest_market_close_position(self, order, max_retries=None):
-        self.rest_client.market_close_position(order, max_retries=max_retries)
+        return self.rest_client.market_close_position(order, max_retries=max_retries)
+
+    def rest_place_stop_close_order(self, order_side, trigger_price, max_retries=None):
+        cl_ord_id = self.generate_client_order_id()
+        stop_order = {'clOrdID': cl_ord_id, 'symbol': self.symbol,
+                      'ordType': 'Stop', 'side': order_side, 'execInst': 'Close', 'stopPx': trigger_price}
+        return self.rest_client.curl_bitmex(path='order', postdict=stop_order, verb='POST')
 
     def rest_cancel_orders(self, order_id_list, max_retries=None):
         if len(order_id_list) == 0:
             return
-        self.rest_client.cancel_orders(order_id_list, max_retries=max_retries)
+        return self.rest_client.cancel_orders(order_id_list, max_retries=max_retries)
 
     def rest_cancel_all_orders(self):
         open_orders = self.ws_open_order_objects_of_account()
-        self.rest_cancel_orders([o.order_id for o in open_orders.to_list()])
+        return self.rest_cancel_orders([o.order_id for o in open_orders.to_list()])
 
     def rest_get_raw_orders_of_account(self, filter_json_obj, count=500):
         return self.rest_client.get_orders_of_account(filter_json_obj, count)
@@ -259,9 +265,10 @@ class BitMEXClient:
     def rest_get_raw_margin_of_account(self):
         return self.rest_client.get_user_margin()
 
-    def rest_get_raw_wallet_history(self, filter_json_obj, count=500, sort_reverse=True):
-        result = self.rest_client.get_wallet_history(filter_json_obj, count)
-        return sorted(result, key=lambda e: e['transactTime'], reverse=sort_reverse)
+    def rest_get_raw_realized_pnl_history(self, filter_json_obj, count=500, sort_reverse=True):
+        history = self.rest_client.get_wallet_history(filter_json_obj, count)
+        return sorted([each for each in history if each['transactType'] == 'RealisedPNL'],
+                      key=lambda e: e['transactTime'], reverse=sort_reverse)
 
     def generate_client_order_id(self):
         return rest.generate_client_order_id(self.order_id_prefix)

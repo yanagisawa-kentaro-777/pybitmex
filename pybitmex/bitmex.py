@@ -234,6 +234,11 @@ class BitMEXClient:
                   for each in open_orders if predicate(each)]
         return self.rest_client.amend_orders(orders)
 
+    def rest_amend_orders(self, new_order_list):
+        if len(new_order_list) == 0:
+            return
+        self.rest_client.amend_orders([o for o in new_order_list])
+
     def rest_market_close_position(self, order, max_retries=None):
         return self.rest_client.market_close_position(order, max_retries=max_retries)
 
